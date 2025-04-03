@@ -258,6 +258,13 @@ class ASTBuilder(Transformer):
         # Eliminar comillas
         value = str_token.value[1:-1]
         return StringNode(value, str_token.line, str_token.column)
+    
+    @v_args(inline=True)
+    def expresion(self, expr):
+        """
+        Manejar nodo de expresión (asegura la conversión adecuada de Tree a nodos AST personalizados)
+        """
+        return expr
 
 
 class ParserController:

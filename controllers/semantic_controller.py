@@ -27,11 +27,22 @@ class ASTVisitor:
         Método genérico para visitar un nodo.
         
         Args:
-            node (ASTNode): Nodo a visitar
+            node (ASTNode o Tree): Nodo a visitar
             
         Returns:
             varies: El resultado de visitar el nodo
         """
+        import lark
+        
+        # Verificar si es un objeto Tree de Lark
+        if isinstance(node, lark.Tree):
+            print(f"Advertencia: Se encontró un nodo Tree de Lark de tipo '{node.data}'")
+            # Procesar hijos
+            for child in node.children:
+                self.visit(child)
+            return None
+        
+        # Manejo regular para nodos AST
         if hasattr(node, 'children'):
             for child in node.children:
                 self.visit(child)
