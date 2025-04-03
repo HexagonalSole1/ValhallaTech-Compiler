@@ -42,8 +42,14 @@ expresion: expr_logica
 
 expr_logica: expr_relacional (operador_logico expr_relacional)*
 
-expr_relacional: expr_aritmetica (operador_relacional expr_aritmetica)*
-
+expr_relacional: expr_aritmetica
+               | expr_relacional "==" expr_aritmetica
+               | expr_relacional "!=" expr_aritmetica
+               | expr_relacional ">" expr_aritmetica
+               | expr_relacional "<" expr_aritmetica
+               | expr_relacional ">=" expr_aritmetica
+               | expr_relacional "<=" expr_aritmetica
+               
 expr_aritmetica: termino (operador_suma termino)*
 
 termino: factor (operador_mult factor)*

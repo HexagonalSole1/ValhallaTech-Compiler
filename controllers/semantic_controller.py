@@ -50,15 +50,13 @@ class SemanticVisitor(ASTVisitor):
     def visit_ProgramNode(self, node):
         """
         Visita el nodo raíz del programa.
-        
-        Args:
-            node (ProgramNode): Nodo a visitar
-            
-        Returns:
-            bool: True si no hay errores semánticos, False en caso contrario
         """
+        print("Visitando ProgramNode")
+        print(f"  Número de hijos: {len(node.children)}")
+        
         # Visitar todos los hijos
-        for child in node.children:
+        for i, child in enumerate(node.children):
+            print(f"  Hijo {i}: {type(child).__name__}")
             self.visit(child)
         
         # Verificar si hay errores semánticos
@@ -67,41 +65,47 @@ class SemanticVisitor(ASTVisitor):
     def visit_DeclarationNode(self, node):
         """
         Visita un nodo de declaración.
-        
-        Args:
-            node (DeclarationNode): Nodo a visitar
         """
+        print(f"Visitando DeclarationNode con tipo: {node.var_type}")
+        print(f"  Número de hijos: {len(node.children)}")
+        
         # Propagar el tipo a la lista de identificadores
-        for child in node.children:
+        for i, child in enumerate(node.children):
+            print(f"  Hijo {i}: {type(child).__name__}")
             if isinstance(child, IdentifierListNode):
+                print(f"  Propagando tipo {node.var_type} a lista de identificadores")
                 child.type = node.var_type
                 self.visit(child)
-    
+            else:
+                print(f"  ADVERTENCIA: Hijo no es IdentifierListNode")
     def visit_IdentifierListNode(self, node):
-        """
-        Visita un nodo de lista de identificadores.
+        """Visita un nodo de lista de identificadores."""
+        print(f"Visitando IdentifierListNode")
+        print(f"  Tipo heredado: {node.type}")
+        print(f"  Identificadores: {node.identifiers if hasattr(node, 'identifiers') else 'ninguno'}")
+        print(f"  Número de hijos: {len(node.children)}")
         
-        Args:
-            node (IdentifierListNode): Nodo a visitar
-        """
         # Insertar cada identificador en la tabla de símbolos
         for child in node.children:
+            print(f"  Procesando hijo: {type(child).__name__}")
             if isinstance(child, IdentifierNode):
+                print(f"    Nombre identificador: {child.name}")
                 child.type = node.type  # Propagar el tipo heredado
                 
                 # Verificar si ya existe
                 if self.symbol_table.lookup(child.name):
+                    print(f"    ¡Ya existe! No se inserta")
                     error = RedeclarationError(child.name, child.line, child.column)
                     self.error_collection.add_error(error)
                 else:
                     # Insertar en la tabla de símbolos
+                    print(f"    Insertando en tabla: {child.name} ({node.type})")
                     self.symbol_table.insert(
                         name=child.name,
                         type=child.type,
                         line=child.line,
                         column=child.column
                     )
-    
     def visit_AssignmentNode(self, node):
         """
         Visita un nodo de asignación.
@@ -421,22 +425,26 @@ class SemanticController:
     def analyze(self, ast):
         """
         Realiza el análisis semántico del AST.
-        
-        Args:
-            ast (ASTNode): Raíz del AST a analizar
-            
-        Returns:
-            bool: True si no hay errores semánticos, False en caso contrario
         """
         if ast is None:
+            print("Error: AST es None")
             return False
+        
+        print(f"Iniciando análisis semántico. Tipo de AST: {type(ast).__name__}")
         
         # Reiniciar la tabla de símbolos
         self.symbol_table = SymbolTable()
         self.visitor.symbol_table = self.symbol_table
         
         # Ejecutar el análisis semántico
-        return self.visitor.visit(ast)
+        result = self.visitor.visit(ast)
+        
+        print(f"Análisis semántico completado. Resultado: {result}")
+        print(f"Símbolos encontrados: {len(self.symbol_table.get_all_symbols())}")
+        for symbol in self.symbol_table.get_all_symbols():
+            print(f"  - {symbol.name} ({symbol.type})")
+        
+        return result
     
     def get_symbol_table(self):
         """

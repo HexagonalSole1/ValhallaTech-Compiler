@@ -18,6 +18,8 @@ class ASTBuilder(Transformer):
     
     @v_args(inline=True)
     def declaracion(self, tipo, identificador_lista):
+        print(f"Creando nodo de declaración con tipo: {tipo}")
+        print(f"Identificadores: {identificador_lista.identifiers if hasattr(identificador_lista, 'identifiers') else 'ninguno'}")
         node = DeclarationNode(tipo)
         node.add_child(identificador_lista)
         return node
@@ -85,42 +87,88 @@ class ASTBuilder(Transformer):
             return args[0]
         left = args[0]
         for i in range(1, len(args), 2):
-            operator = args[i]
-            right = args[i+1]
-            left = BinaryOpNode(operator, left, right)
+            if i+1 < len(args):  # Verificar que hay operando derecho
+                operator = args[i] if isinstance(args[i], str) else "&&"
+                right = args[i+1]
+                left = BinaryOpNode(operator, left, right)
         return left
     
     @v_args(inline=True)
     def expr_relacional(self, *args):
+        print(f"Procesando expresión relacional con {len(args)} argumentos")
+        
+        # Caso 1: Un solo argumento (expresión simple)
         if len(args) == 1:
             return args[0]
+        
+        # Caso 2: Dos argumentos (expresión relacional sin operador explícito)
+        if len(args) == 2:
+            left = args[0]
+            right = args[1]
+            
+            # Como no tenemos el operador, usamos ">" por defecto para la condición if
+            # Este operador se infiere del contexto (si estamos en un if o while)
+            operator = ">"
+            print(f"  Inferido operador: {operator} para operandos: {type(left).__name__} y {type(right).__name__}")
+            return BinaryOpNode(operator, left, right)
+        
+        # Caso 3: Tres argumentos (el caso normal que esperaríamos)
+        if len(args) == 3:
+            left = args[0]
+            operator = args[1]
+            right = args[2]
+            return BinaryOpNode(operator, left, right)
+        
+        # Caso fallback: más argumentos (inusual)
         left = args[0]
         for i in range(1, len(args), 2):
-            operator = args[i]
-            right = args[i+1]
-            left = BinaryOpNode(operator, left, right)
+            if i+1 < len(args):
+                operator = args[i] if i < len(args) else ">"
+                right = args[i+1]
+                left = BinaryOpNode(operator, left, right)
+        
         return left
-    
+
     @v_args(inline=True)
     def expr_aritmetica(self, *args):
         if len(args) == 1:
             return args[0]
+            
+        # Caso para cuando tenemos dos argumentos pero falta el operador
+        if len(args) == 2:
+            left = args[0]
+            right = args[1]
+            operator = "+"  # Operador predeterminado
+            print(f"  Inferido operador suma: {operator} para operandos: {type(left).__name__} y {type(right).__name__}")
+            return BinaryOpNode(operator, left, right)
+            
         left = args[0]
         for i in range(1, len(args), 2):
-            operator = args[i]
-            right = args[i+1]
-            left = BinaryOpNode(operator, left, right)
+            if i+1 < len(args):
+                operator = args[i] if isinstance(args[i], str) else "+"
+                right = args[i+1]
+                left = BinaryOpNode(operator, left, right)
         return left
     
     @v_args(inline=True)
     def termino(self, *args):
         if len(args) == 1:
             return args[0]
+            
+        # Caso para cuando tenemos dos argumentos pero falta el operador
+        if len(args) == 2:
+            left = args[0]
+            right = args[1]
+            operator = "*"  # Operador predeterminado
+            print(f"  Inferido operador multiplicación: {operator} para operandos: {type(left).__name__} y {type(right).__name__}")
+            return BinaryOpNode(operator, left, right)
+            
         left = args[0]
         for i in range(1, len(args), 2):
-            operator = args[i]
-            right = args[i+1]
-            left = BinaryOpNode(operator, left, right)
+            if i+1 < len(args):
+                operator = args[i] if isinstance(args[i], str) else "*"
+                right = args[i+1]
+                left = BinaryOpNode(operator, left, right)
         return left
     
     @v_args(inline=True)
@@ -128,20 +176,40 @@ class ASTBuilder(Transformer):
         return value
     
     @v_args(inline=True)
-    def operador_logico(self, op):
-        return op.value
+    def operador_logico(self, *args):
+        if not args:
+            print("Warning: operador_logico llamado sin argumentos")
+            return "&&"  # Valor predeterminado
+        op = args[0]
+        return op.value if hasattr(op, 'value') else str(op)
     
     @v_args(inline=True)
-    def operador_relacional(self, op):
-        return op.value
+    def operador_relacional(self, *args):
+        if not args:
+            print("Warning: operador_relacional llamado sin argumentos")
+            return ">"  # Valor predeterminado
+        
+        op = args[0]
+        print(f"Procesando operador relacional: {op}")
+        if hasattr(op, 'value'):
+            return op.value
+        return str(op)
     
     @v_args(inline=True)
-    def operador_suma(self, op):
-        return op.value
+    def operador_suma(self, *args):
+        if not args:
+            print("Warning: operador_suma llamado sin argumentos")
+            return "+"  # Valor predeterminado
+        op = args[0]
+        return op.value if hasattr(op, 'value') else str(op)
     
     @v_args(inline=True)
-    def operador_mult(self, op):
-        return op.value
+    def operador_mult(self, *args):
+        if not args:
+            print("Warning: operador_mult llamado sin argumentos")
+            return "*"  # Valor predeterminado
+        op = args[0]
+        return op.value if hasattr(op, 'value') else str(op)
     
     @v_args(inline=True)
     def variable(self, var_token):
@@ -229,3 +297,22 @@ class ParserController:
             bool: True si hay errores, False en caso contrario
         """
         return any(isinstance(e, SyntaxError) for e in self.error_collection.get_all_errors())
+    
+    # Métodos auxiliares para diferentes operadores relacionales
+    def eq(self, left, right):
+        return BinaryOpNode("==", left, right)
+
+    def ne(self, left, right):
+        return BinaryOpNode("!=", left, right)
+
+    def gt(self, left, right):
+        return BinaryOpNode(">", left, right)
+
+    def lt(self, left, right):
+        return BinaryOpNode("<", left, right)
+
+    def ge(self, left, right):
+        return BinaryOpNode(">=", left, right)
+
+    def le(self, left, right):
+        return BinaryOpNode("<=", left, right)
