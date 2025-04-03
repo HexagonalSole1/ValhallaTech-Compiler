@@ -37,7 +37,9 @@ class LexerController:
         Returns:
             list: Lista de tokens encontrados
         """
+        # Limpiar tokens y errores previos
         self.tokens = []
+        self.error_collection.lexical_errors.clear()
         
         try:
             # Usar Lark para tokenizar

@@ -14,76 +14,96 @@ class AttributeHandler:
     def handle_declaration(self, decl_node):
         """
         Maneja la regla de declaración, insertando símbolos en la tabla.
-        """
-        print(f"Procesando declaración - Tipo: {decl_node.var_type}")
-        print(f"  Número de hijos: {len(decl_node.children)}")
         
+        Args:
+            decl_node (DeclarationNode): Nodo de declaración
+            
+        Returns:
+            bool: True si la operación fue exitosa, False en caso contrario
+        """
         var_type = decl_node.var_type
+        
+        # Verificar que el nodo tenga hijos
+        if not decl_node.children:
+            return False
         
         # Iterar sobre los hijos (lista de identificadores)
         for child in decl_node.children:
             # Verificar que sea un IdentifierListNode
-            if hasattr(child, 'identifiers'):
-                print(f"  Identificadores en la lista: {child.identifiers}")
+            if hasattr(child, 'identifiers') and child.identifiers:
+                # Propagar el tipo a la lista de identificadores
+                child.type = var_type
                 
-                for identifier_name in child.identifiers:
-                    print(f"  Insertando símbolo: {identifier_name} (tipo: {var_type})")
-                    
-                    # Verificar si ya existe
-                    existing_symbol = self.symbol_table.lookup(identifier_name)
-                    if existing_symbol:
-                        error = RedeclarationError(
-                            identifier_name, 
-                            line=None,  # Añadir línea si es posible
-                            column=None  # Añadir columna si es posible
-                        )
-                        self.error_collection.add_error(error)
-                    else:
-                        # Insertar nuevo símbolo
-                        self.symbol_table.insert(
-                            name=identifier_name,
-                            type=var_type
-                        )
+                # Simplemente delegar el procesamiento al método de manejo de lista de identificadores
+                self.handle_identifier_list(child)
         
         return True
     
     def handle_identifier_list(self, list_node):
         """
         Maneja la regla de lista de identificadores.
+        
+        Args:
+            list_node (IdentifierListNode): Nodo de lista de identificadores
+            
+        Returns:
+            bool: True si la operación fue exitosa, False en caso contrario
         """
-        print(f"Procesando lista de identificadores:")
-        print(f"  Tipo heredado: {list_node.type}")
-        print(f"  Identificadores: {list_node.identifiers}")
+        # Verificar que el nodo tenga tipo
+        if not hasattr(list_node, 'type') or not list_node.type:
+            return False
         
         inherited_type = list_node.type
         
+        # Lista para almacenar identificadores procesados
+        processed_ids = []
+        
+        # Primera pasada: verificar redeclaraciones entre identificadores de la misma lista
         for child in list_node.children:
-            print(f"  Procesando identificador: {child.name}")
-            
-            name = child.name
-            if self.symbol_table.lookup(name):
-                # Error: variable ya declarada
-                error = RedeclarationError(name, child.line, child.column)
-                self.error_collection.add_error(error)
-            else:
-                # insertar(TablaSimbolos, i, L.tipo)
-                self.symbol_table.insert(
-                    name=name,
-                    type=inherited_type,
-                    line=child.line,
-                    column=child.column
-                )
-                print(f"  Insertado símbolo: {name} ({inherited_type})")
+            if hasattr(child, 'name'):
+                name = child.name
+                
+                # Verificar si este nombre ya fue procesado en esta misma lista
+                if name in processed_ids:
+                    error = RedeclarationError(name, child.line, child.column)
+                    self.error_collection.add_error(error)
+                    continue
+                
+                # Verificar si ya existe en la tabla de símbolos
+                if self.symbol_table.lookup(name):
+                    error = RedeclarationError(name, child.line, child.column)
+                    self.error_collection.add_error(error)
+                else:
+                    # Propagar el tipo al nodo de identificador
+                    child.type = inherited_type
+                    
+                    # Insertar en la tabla de símbolos
+                    self.symbol_table.insert(
+                        name=name,
+                        type=inherited_type,
+                        line=child.line,
+                        column=child.column
+                    )
+                
+                # Marcar este identificador como procesado
+                processed_ids.append(name)
         
         return True
     
     def handle_assignment(self, assign_node):
         """
-        Maneja la regla: A ::= i = E { si i ∈ TablaSimbolos ∧ i.tipo == E.tipo entonces A.tipo = E.tipo; }
+        Maneja la regla de asignación.
         
         Args:
-            assign_node: Nodo de asignación
+            assign_node (AssignmentNode): Nodo de asignación
+            
+        Returns:
+            bool: True si la operación fue exitosa, False en caso contrario
         """
+        # Verificar que el nodo tenga identificador y expresión
+        if not hasattr(assign_node, 'identifier') or not hasattr(assign_node, 'expression'):
+            return False
+        
         identifier = assign_node.identifier
         expression = assign_node.expression
         
@@ -98,6 +118,10 @@ class AttributeHandler:
         identifier.type = symbol.type
         
         # Verificar compatibilidad de tipos
+        if not expression.type:
+            # Si la expresión no tiene tipo, no podemos verificar compatibilidad
+            return False
+        
         if not self.are_types_compatible(symbol.type, expression.type):
             error = TypeError(
                 expected=symbol.type,
@@ -110,7 +134,7 @@ class AttributeHandler:
             return False
         
         # Si los tipos son compatibles, propagar el tipo a la asignación
-        assign_node.type = expression.type
+        assign_node.type = symbol.type
         
         # Actualizar el valor en la tabla de símbolos si es un valor literal
         if hasattr(expression, 'value') and expression.value is not None:
@@ -120,11 +144,22 @@ class AttributeHandler:
     
     def handle_binary_op(self, bin_op_node):
         """
-        Maneja las reglas de operaciones aritméticas, relacionales y lógicas
+        Maneja las reglas de operaciones binarias.
         
         Args:
-            bin_op_node: Nodo de operación binaria
+            bin_op_node (BinaryOpNode): Nodo de operación binaria
+            
+        Returns:
+            bool: True si la operación fue exitosa, False en caso contrario
         """
+        # Verificar que el nodo tenga operandos y operador
+        if not hasattr(bin_op_node, 'left') or not hasattr(bin_op_node, 'right') or not hasattr(bin_op_node, 'operator'):
+            return False
+        
+        # Verificar que ambos operandos tengan tipo
+        if not hasattr(bin_op_node.left, 'type') or not hasattr(bin_op_node.right, 'type'):
+            return False
+        
         left_type = bin_op_node.left.type
         right_type = bin_op_node.right.type
         operator = bin_op_node.operator
@@ -192,15 +227,18 @@ class AttributeHandler:
     
     def handle_if_condition(self, if_node):
         """
-        Maneja la regla de condicional:
-        Condicional ::= si ( E ) { S1 } oNo { S2 } { 
-            si E.tipo == bool entonces ejecutar_condicional(E.valor, S1, S2);
-            si no, error("La condición del 'si' debe ser booleana."); 
-        }
+        Maneja la regla de condicional.
         
         Args:
-            if_node: Nodo de condición if
+            if_node (IfNode): Nodo de condición if
+            
+        Returns:
+            bool: True si la operación fue exitosa, False en caso contrario
         """
+        # Verificar que el nodo tenga condición
+        if not hasattr(if_node, 'condition') or not hasattr(if_node.condition, 'type'):
+            return False
+        
         condition_type = if_node.condition.type
         
         # Verificar que la condición sea booleana
@@ -219,15 +257,18 @@ class AttributeHandler:
     
     def handle_while_loop(self, while_node):
         """
-        Maneja la regla de bucle while:
-        Mientras ::= mientras ( E ) { S } {
-            si E.tipo == bool entonces ejecutar_mientras(E, S);
-            si no, error("La condición del 'mientras' debe ser booleana.");
-        }
+        Maneja la regla de bucle while.
         
         Args:
-            while_node: Nodo de bucle while
+            while_node (WhileNode): Nodo de bucle while
+            
+        Returns:
+            bool: True si la operación fue exitosa, False en caso contrario
         """
+        # Verificar que el nodo tenga condición
+        if not hasattr(while_node, 'condition') or not hasattr(while_node.condition, 'type'):
+            return False
+        
         condition_type = while_node.condition.type
         
         # Verificar que la condición sea booleana
@@ -246,15 +287,18 @@ class AttributeHandler:
     
     def handle_repeat_loop(self, repeat_node):
         """
-        Maneja la regla de bucle repeat:
-        Repetir ::= repetir ( num ) { S } {
-            si obtener_tipo(num) == entero entonces ejecutar_repetir(num.lexval, S);
-            si no, error("El número de repeticiones debe ser entero.");
-        }
+        Maneja la regla de bucle repeat.
         
         Args:
-            repeat_node: Nodo de bucle repeat
+            repeat_node (RepeatNode): Nodo de bucle repeat
+            
+        Returns:
+            bool: True si la operación fue exitosa, False en caso contrario
         """
+        # Verificar que el nodo tenga contador
+        if not hasattr(repeat_node, 'count') or not hasattr(repeat_node.count, 'type'):
+            return False
+        
         count_type = repeat_node.count.type
         
         # Verificar que el contador sea entero
@@ -273,14 +317,13 @@ class AttributeHandler:
     
     def handle_print(self, print_node):
         """
-        Maneja la regla de impresión:
-        Salida ::= sout ( i ) ; {
-            si i ∈ TablaSimbolos entonces imprimir(buscar_valor(i));
-            si no, error("Variable no declarada.");
-        }
+        Maneja la regla de impresión.
         
         Args:
-            print_node: Nodo de impresión
+            print_node (PrintNode): Nodo de impresión
+            
+        Returns:
+            bool: True si la operación fue exitosa, False en caso contrario
         """
         # No necesitamos validación de tipo - cualquier tipo puede imprimirse
         return True
@@ -290,8 +333,15 @@ class AttributeHandler:
         Maneja la regla de entrada (scan).
         
         Args:
-            input_node: Nodo de entrada
+            input_node (InputNode): Nodo de entrada
+            
+        Returns:
+            bool: True si la operación fue exitosa, False en caso contrario
         """
+        # Verificar que el nodo tenga variable
+        if not hasattr(input_node, 'variable') or not hasattr(input_node.variable, 'name'):
+            return False
+        
         var_name = input_node.variable.name
         symbol = self.symbol_table.lookup(var_name)
         
@@ -307,11 +357,10 @@ class AttributeHandler:
     def are_types_compatible(self, target_type, source_type):
         """
         Verifica si dos tipos son compatibles para asignación.
-        Implementación de la función 'verificar_tipos' mencionada en la gramática atributada.
         
         Args:
-            target_type: Tipo de destino
-            source_type: Tipo de origen
+            target_type (str): Tipo de destino
+            source_type (str): Tipo de origen
             
         Returns:
             bool: True si los tipos son compatibles, False en caso contrario

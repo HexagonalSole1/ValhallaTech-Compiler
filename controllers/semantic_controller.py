@@ -50,12 +50,12 @@ class SemanticVisitor(ASTVisitor):
             symbol_table (SymbolTable, optional): Tabla de símbolos
             error_collection (ErrorCollection, optional): Colección para almacenar errores
         """
+        # Forzar la creación de una nueva tabla de símbolos para cada visitor
         self.symbol_table = symbol_table or SymbolTable()
         self.error_collection = error_collection or ErrorCollection()
         
-        # Usar el manejador de atributos para la gramática atributada
-        from attribute_grammar import AttributeHandler
-        self.attr_handler = AttributeHandler(self.symbol_table, self.error_collection)
+        # Variables internas para seguimiento - usado para depuración
+        self._declared_variables = []
     
     def visit_ProgramNode(self, node):
         """
@@ -64,6 +64,9 @@ class SemanticVisitor(ASTVisitor):
         print("Visitando ProgramNode")
         print(f"  Número de hijos: {len(node.children)}")
         
+        # Limpiar cualquier estado residual
+        self._declared_variables.clear()
+        
         # Visitar todos los hijos en orden
         for i, child in enumerate(node.children):
             print(f"  Visitando hijo {i} ({type(child).__name__})")
@@ -71,42 +74,72 @@ class SemanticVisitor(ASTVisitor):
         
         # Verificar si hay errores semánticos
         return not any(isinstance(e, SemanticError) for e in self.error_collection.get_all_errors())
-        
+    
     def visit_DeclarationNode(self, node):
         """
         Visita un nodo de declaración.
-        Aplica la regla: D ::= T L { L.tipo = T.tipo; D.tipo = L.tipo; }
         """
         print(f"Visitando DeclarationNode con tipo: {node.var_type}")
         print(f"  Número de hijos: {len(node.children)}")
         
-        # Aplicar regla de la gramática atributada
-        self.attr_handler.handle_declaration(node)
+        var_type = node.var_type
         
-        # Visitar hijos para propagar los atributos
+        # Verificar que el nodo tenga hijos
+        if not node.children:
+            return False
+        
+        # Iterar sobre los hijos (lista de identificadores)
+        for child in node.children:
+            # Verificar que sea un IdentifierListNode
+            if hasattr(child, 'identifiers') and child.identifiers:
+                # Propagar el tipo a la lista de identificadores
+                child.type = var_type
+                
+                # Procesar cada identificador en la lista
+                for id_node in child.children:
+                    if hasattr(id_node, 'name'):
+                        # Comprobar si la variable ya está declarada en este análisis
+                        if id_node.name in self._declared_variables:
+                            error = RedeclarationError(
+                                id_node.name, 
+                                line=id_node.line,
+                                column=id_node.column
+                            )
+                            self.error_collection.add_error(error)
+                        else:
+                            # Propagar el tipo al nodo de identificador
+                            id_node.type = var_type
+                            
+                            # Insertar en la tabla de símbolos
+                            self.symbol_table.insert(
+                                name=id_node.name,
+                                type=var_type,
+                                line=id_node.line,
+                                column=id_node.column
+                            )
+                            
+                            # Registrar como declarada en este análisis
+                            self._declared_variables.append(id_node.name)
+        
+        # Continuar visitando los hijos
         for child in node.children:
             self.visit(child)
     
     def visit_IdentifierListNode(self, node):
         """
         Visita un nodo de lista de identificadores.
-        Aplica la regla: L ::= i { i.tipo = L.tipo; insertar(TablaSimbolos, i, L.tipo); }
         """
         print(f"Visitando IdentifierListNode")
         print(f"  Tipo heredado: {node.type}")
         
-        # Aplicar regla de la gramática atributada
-        self.attr_handler.handle_identifier_list(node)
-        
-        # No es necesario visitar los identificadores aquí, ya fueron procesados
+        # El procesamiento ya se hizo en visit_DeclarationNode
+        # Solo para depuración
+        if hasattr(node, 'identifiers'):
+            print(f"  Identificadores en la lista: {node.identifiers}")
     
     def visit_AssignmentNode(self, node):
         """
         Visita un nodo de asignación.
-        Aplica la regla: A ::= i = E { si i ∈ TablaSimbolos ∧ i.tipo == E.tipo entonces A.tipo = E.tipo; }
-        
-        Args:
-            node (AssignmentNode): Nodo a visitar
         """
         print(f"Visitando AssignmentNode: {node.identifier.name if hasattr(node.identifier, 'name') else '?'}")
         
@@ -116,16 +149,46 @@ class SemanticVisitor(ASTVisitor):
         # Luego visitar el identificador
         self.visit(node.identifier)
         
-        # Aplicar regla de la gramática atributada
-        self.attr_handler.handle_assignment(node)
+        # Verificar si la variable está declarada
+        identifier = node.identifier
+        symbol = self.symbol_table.lookup(identifier.name)
+        
+        if not symbol:
+            error = UndeclaredError(identifier.name, identifier.line, identifier.column)
+            self.error_collection.add_error(error)
+            return False
+        
+        # Propagar el tipo del símbolo al identificador
+        identifier.type = symbol.type
+        
+        # Verificar compatibilidad de tipos
+        expression = node.expression
+        if not expression.type:
+            return False
+        
+        if not self.are_types_compatible(symbol.type, expression.type):
+            error = TypeError(
+                expected=symbol.type,
+                found=expression.type,
+                message=f"Tipos incompatibles en asignación: '{symbol.type}' y '{expression.type}'",
+                line=node.line,
+                column=node.column
+            )
+            self.error_collection.add_error(error)
+            return False
+        
+        # Si los tipos son compatibles, propagar el tipo a la asignación
+        node.type = symbol.type
+        
+        # Actualizar el valor en la tabla de símbolos si es un valor literal
+        if hasattr(expression, 'value') and expression.value is not None:
+            self.symbol_table.update(identifier.name, value=expression.value)
+        
+        return True
     
     def visit_BinaryOpNode(self, node):
         """
         Visita un nodo de operación binaria.
-        Aplica las reglas para operaciones según el operador.
-        
-        Args:
-            node (BinaryOpNode): Nodo a visitar
         """
         print(f"Visitando BinaryOpNode con operador: {node.operator}")
         
@@ -133,24 +196,92 @@ class SemanticVisitor(ASTVisitor):
         self.visit(node.left)
         self.visit(node.right)
         
-        # Aplicar regla de la gramática atributada
-        self.attr_handler.handle_binary_op(node)
+        left_type = node.left.type
+        right_type = node.right.type
+        operator = node.operator
+        
+        # Verificar que ambos operandos tienen tipo válido
+        if left_type is None or right_type is None:
+            node.type = None
+            return False
+        
+        # Operadores aritméticos
+        if operator in ('+', '-', '*', '/'):
+            if left_type == 'ent' and right_type == 'ent':
+                node.type = 'ent'
+            elif left_type in ('ent', 'dec') and right_type in ('ent', 'dec'):
+                node.type = 'dec'
+            elif operator == '+' and left_type == 'cadena' and right_type == 'cadena':
+                node.type = 'cadena'  # Concatenación
+            else:
+                error = TypeError(
+                    expected="tipos numéricos compatibles",
+                    found=f"{left_type} y {right_type}",
+                    message=f"Operador '{operator}' no puede aplicarse a tipos '{left_type}' y '{right_type}'",
+                    line=node.line,
+                    column=node.column
+                )
+                self.error_collection.add_error(error)
+                node.type = None
+                return False
+        
+        # Operadores relacionales
+        elif operator in ('==', '!=', '>', '<', '>=', '<='):
+            if (left_type in ('ent', 'dec') and right_type in ('ent', 'dec')) or \
+               (left_type == right_type):
+                node.type = 'bool'
+            else:
+                error = TypeError(
+                    expected="tipos compatibles",
+                    found=f"{left_type} y {right_type}",
+                    message=f"Operador '{operator}' no puede aplicarse a tipos '{left_type}' y '{right_type}'",
+                    line=node.line,
+                    column=node.column
+                )
+                self.error_collection.add_error(error)
+                node.type = None
+                return False
+        
+        # Operadores lógicos
+        elif operator in ('&&', '||'):
+            if left_type == 'bool' and right_type == 'bool':
+                node.type = 'bool'
+            else:
+                error = TypeError(
+                    expected="bool",
+                    found=f"{left_type} y {right_type}",
+                    message=f"Operador '{operator}' requiere operandos booleanos",
+                    line=node.line,
+                    column=node.column
+                )
+                self.error_collection.add_error(error)
+                node.type = None
+                return False
+        
+        return True
     
     def visit_IfNode(self, node):
         """
         Visita un nodo de condición if.
-        Aplica la regla para verificar que la condición sea booleana.
-        
-        Args:
-            node (IfNode): Nodo a visitar
         """
         print(f"Visitando IfNode")
         
         # Visitar la condición
         self.visit(node.condition)
         
-        # Aplicar regla de la gramática atributada
-        self.attr_handler.handle_if_condition(node)
+        condition_type = node.condition.type
+        
+        # Verificar que la condición sea booleana
+        if condition_type != 'bool' and condition_type is not None:
+            error = TypeError(
+                expected="bool",
+                found=condition_type,
+                message="La condición del 'si' debe ser booleana",
+                line=node.condition.line,
+                column=node.condition.column
+            )
+            self.error_collection.add_error(error)
+            return False
         
         # Visitar los bloques con nuevos ámbitos
         self.symbol_table.enter_scope()
@@ -161,115 +292,129 @@ class SemanticVisitor(ASTVisitor):
             self.symbol_table.enter_scope()
             self.visit(node.else_body)
             self.symbol_table.exit_scope()
+        
+        return True
     
     def visit_WhileNode(self, node):
         """
         Visita un nodo de bucle while.
-        Aplica la regla para verificar que la condición sea booleana.
-        
-        Args:
-            node (WhileNode): Nodo a visitar
         """
         print(f"Visitando WhileNode")
         
         # Visitar la condición
         self.visit(node.condition)
         
-        # Aplicar regla de la gramática atributada
-        self.attr_handler.handle_while_loop(node)
+        condition_type = node.condition.type
+        
+        # Verificar que la condición sea booleana
+        if condition_type != 'bool' and condition_type is not None:
+            error = TypeError(
+                expected="bool",
+                found=condition_type,
+                message="La condición del 'mientras' debe ser booleana",
+                line=node.condition.line,
+                column=node.condition.column
+            )
+            self.error_collection.add_error(error)
+            return False
         
         # Visitar el bloque con nuevo ámbito
         self.symbol_table.enter_scope()
         self.visit(node.body)
         self.symbol_table.exit_scope()
+        
+        return True
     
     def visit_RepeatNode(self, node):
         """
         Visita un nodo de bucle repeat.
-        Aplica la regla para verificar que el contador sea entero.
-        
-        Args:
-            node (RepeatNode): Nodo a visitar
         """
         print(f"Visitando RepeatNode")
         
         # Visitar la expresión de conteo
         self.visit(node.count)
         
-        # Aplicar regla de la gramática atributada
-        self.attr_handler.handle_repeat_loop(node)
+        count_type = node.count.type
+        
+        # Verificar que el contador sea entero
+        if count_type != 'ent' and count_type is not None:
+            error = TypeError(
+                expected="ent",
+                found=count_type,
+                message="El número de repeticiones debe ser entero",
+                line=node.count.line,
+                column=node.count.column
+            )
+            self.error_collection.add_error(error)
+            return False
         
         # Visitar el bloque con nuevo ámbito
         self.symbol_table.enter_scope()
         self.visit(node.body)
         self.symbol_table.exit_scope()
+        
+        return True
     
     def visit_PrintNode(self, node):
         """
         Visita un nodo de impresión.
-        
-        Args:
-            node (PrintNode): Nodo a visitar
         """
         print(f"Visitando PrintNode")
         
         # Visitar la expresión a imprimir
         self.visit(node.expression)
         
-        # Aplicar regla de la gramática atributada
-        self.attr_handler.handle_print(node)
+        return True
     
     def visit_InputNode(self, node):
         """
         Visita un nodo de entrada.
-        
-        Args:
-            node (InputNode): Nodo a visitar
         """
         print(f"Visitando InputNode")
         
-        # Aplicar regla de la gramática atributada
-        self.attr_handler.handle_input(node)
+        var_name = node.variable.name
+        symbol = self.symbol_table.lookup(var_name)
+        
+        if not symbol:
+            error = UndeclaredError(var_name, node.variable.line, node.variable.column)
+            self.error_collection.add_error(error)
+            return False
+        
+        # Propagar el tipo
+        node.variable.type = symbol.type
+        return True
     
     def visit_BlockNode(self, node):
         """
         Visita un nodo de bloque.
-        
-        Args:
-            node (BlockNode): Nodo a visitar
         """
         print(f"Visitando BlockNode con {len(node.statements)} instrucciones")
         
         # Visitar todas las instrucciones del bloque
         for statement in node.statements:
             self.visit(statement)
+        
+        return True
     
     def visit_NumberNode(self, node):
         """
         Visita un nodo de número.
-        
-        Args:
-            node (NumberNode): Nodo a visitar
         """
         # El tipo ya está establecido durante la construcción del AST
         print(f"Visitando NumberNode: {node.value} de tipo {node.type}")
+        return True
     
     def visit_StringNode(self, node):
         """
         Visita un nodo de cadena.
-        
-        Args:
-            node (StringNode): Nodo a visitar
         """
         # El tipo ya está establecido durante la construcción del AST
         print(f"Visitando StringNode: {node.value} de tipo {node.type}")
+        return True
     
     def visit_VariableNode(self, node):
         """
         Visita un nodo de variable.
-        
-        Args:
-            node (VariableNode): Nodo a visitar
         """
         print(f"Visitando VariableNode: {node.name}")
         
@@ -279,11 +424,30 @@ class SemanticVisitor(ASTVisitor):
         if not symbol:
             error = UndeclaredError(node.name, node.line, node.column)
             self.error_collection.add_error(error)
+            return False
         else:
             # Propagar el tipo y valor
             node.type = symbol.type
             node.value = symbol.value
             print(f"  Asignado tipo {node.type} a variable {node.name}")
+            return True
+    
+    def are_types_compatible(self, target_type, source_type):
+        """
+        Verifica si dos tipos son compatibles para asignación.
+        """
+        if target_type is None or source_type is None:
+            return False
+        
+        # Mismo tipo
+        if target_type == source_type:
+            return True
+        
+        # Conversiones permitidas
+        if target_type == 'dec' and source_type == 'ent':
+            return True
+        
+        return False
 
 
 class SemanticController:
@@ -299,7 +463,7 @@ class SemanticController:
         """
         self.error_collection = error_collection or ErrorCollection()
         self.symbol_table = SymbolTable()
-        self.visitor = SemanticVisitor(self.symbol_table, self.error_collection)
+        self.visitor = None  # Lo crearemos nuevo en cada análisis
     
     def analyze(self, ast):
         """
@@ -311,31 +475,23 @@ class SemanticController:
         
         print(f"Iniciando análisis semántico. Tipo de AST: {type(ast).__name__}")
         
-        # Reiniciar la tabla de símbolos
+        # Limpiar errores semánticos
+        self.error_collection.semantic_errors.clear()
+        
+        # Crear una nueva tabla de símbolos y un nuevo visitor cada vez
         self.symbol_table = SymbolTable()
-        self.visitor.symbol_table = self.symbol_table
-        
-        # Añadir más depuración
-        def print_node_details(node, indent=""):
-            print(f"{indent}Nodo: {type(node).__name__}")
-            if hasattr(node, 'children'):
-                print(f"{indent}  Número de hijos: {len(node.children)}")
-                for child in node.children:
-                    print_node_details(child, indent + "  ")
-        
-        print("Estructura del AST:")
-        print_node_details(ast)
+        self.visitor = SemanticVisitor(self.symbol_table, self.error_collection)
         
         # Ejecutar el análisis semántico
         result = self.visitor.visit(ast)
         
+        # Para depuración
         print(f"Análisis semántico completado. Resultado: {result}")
         print(f"Símbolos encontrados: {len(self.symbol_table.get_all_symbols())}")
         for symbol in self.symbol_table.get_all_symbols():
             print(f"  - {symbol.name} ({symbol.type})")
         
         return result
-            
     
     def get_symbol_table(self):
         """

@@ -9,7 +9,7 @@ from PyQt5.QtGui import QIcon, QFont
 from views.editor_view import EditorView
 from views.output_view import OutputView
 from views.symbol_table_view import SymbolTableView
-
+from models.symbol_table import SymbolTable
 class MainWindow(QMainWindow):
     """
     Ventana principal de la aplicación.
@@ -338,6 +338,9 @@ class MainWindow(QMainWindow):
             
             # Mostrar mensaje de éxito
             self.output_view.append_message("\nAnálisis sintáctico completado con éxito.")
+
+
+
     def _on_semantic_analysis(self):
         """
         Maneja la acción de realizar el análisis semántico.
@@ -351,25 +354,42 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, 'Información', 'El editor está vacío')
             return
         
+        # Limpiar vistas y colecciones de errores
+        self.output_view.clear()
+        self.symbol_table_view.clearContents()
+        self.symbol_table_view.setRowCount(0)
+        
+        self.lexer_controller.error_collection.clear()
+        self.parser_controller.error_collection.clear()
+        self.semantic_controller.error_collection.clear()
+        
+        # Mensaje de inicio
+        self.output_view.append_message("Iniciando análisis semántico...\n")
+        
         # Realizar análisis léxico primero
-        self.lexer_controller.tokenize(code)
+        self.output_view.append_message("1. Ejecutando análisis léxico...")
+        tokens = self.lexer_controller.tokenize(code)
+        
         if self.lexer_controller.has_errors():
             self.output_view.show_errors("Análisis Léxico", 
                                         self.lexer_controller.error_collection.lexical_errors)
             return
         
         # Realizar análisis sintáctico
+        self.output_view.append_message("2. Ejecutando análisis sintáctico...")
         ast = self.parser_controller.parse(code)
+        
         if self.parser_controller.has_errors() or ast is None:
             self.output_view.show_errors("Análisis Sintáctico", 
                                         self.parser_controller.error_collection.syntax_errors)
             return
         
         # Realizar análisis semántico
+        self.output_view.append_message("3. Ejecutando análisis semántico...")
         success = self.semantic_controller.analyze(ast)
         
         # Mostrar resultados
-        if not success:
+        if not success or self.semantic_controller.has_errors():
             self.output_view.show_errors("Análisis Semántico", 
                                         self.semantic_controller.error_collection.semantic_errors)
         else:
@@ -381,7 +401,8 @@ class MainWindow(QMainWindow):
             
             # Mostrar mensaje de éxito en la vista de salida
             self.output_view.append_message("\nAnálisis semántico completado con éxito.")
-    
+
+            
     def _on_full_analysis(self):
         """
         Maneja la acción de realizar el análisis completo (léxico, sintáctico y semántico).
@@ -395,8 +416,16 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, 'Información', 'El editor está vacío')
             return
         
-        # Limpiar vista de salida
+        # Limpiar vistas y colecciones de errores
         self.output_view.clear()
+        self.symbol_table_view.clearContents()
+        self.symbol_table_view.setRowCount(0)
+        
+        # Limpiar explícitamente todas las colecciones de errores
+        self.lexer_controller.error_collection.clear()
+        self.parser_controller.error_collection.clear()
+        self.semantic_controller.error_collection.clear()
+        
         self.output_view.append_message("Iniciando análisis completo...\n")
         
         # 1. Análisis léxico
@@ -408,7 +437,7 @@ class MainWindow(QMainWindow):
                                         self.lexer_controller.error_collection.lexical_errors)
             return
         
-        self.output_view.show_tokens(tokens)
+        self.output_view.append_message(f"Se encontraron {len(tokens)} tokens.")
         self.output_view.append_message("Análisis léxico completado con éxito.\n")
         
         # 2. Análisis sintáctico
@@ -424,9 +453,11 @@ class MainWindow(QMainWindow):
         
         # 3. Análisis semántico
         self.output_view.append_message("=== Análisis Semántico ===")
+        
+        # El semantic_controller.analyze ya reinicia la tabla de símbolos
         success = self.semantic_controller.analyze(ast)
         
-        if not success:
+        if not success or self.semantic_controller.has_errors():
             self.output_view.show_errors("Errores Semánticos", 
                                         self.semantic_controller.error_collection.semantic_errors)
             return
@@ -440,7 +471,6 @@ class MainWindow(QMainWindow):
         
         # Mostrar un mensaje emergente
         QMessageBox.information(self, 'Éxito', 'El análisis completo se ha realizado con éxito!')
-    
     def _on_about(self):
         """
         Muestra información sobre la aplicación.
@@ -454,6 +484,82 @@ class MainWindow(QMainWindow):
                         'Universidad Politécnica de Chiapas\n'
                         '8° Semestre - Ingeniería en Desarrollo de Software\n'
                         'Abril 2025')
+    def _debug_semantic_analysis(self):
+        """
+        Método para depurar el análisis semántico.
+        """
+        # Limpiar vista de salida
+        self.output_view.clear()
+        
+        # Imprimir información de estado actual
+        self.output_view.append_message("=== ESTADO DE DEPURACIÓN ===\n", QColor("#ffc66d"))
+        
+        # Verificar los controladores
+        self.output_view.append_message("Controladores:")
+        self.output_view.append_message(f"  - LexerController: {self.lexer_controller}")
+        self.output_view.append_message(f"  - ParserController: {self.parser_controller}")
+        self.output_view.append_message(f"  - SemanticController: {self.semantic_controller}")
+        
+        # Verificar las colecciones de errores
+        if hasattr(self.lexer_controller, 'error_collection'):
+            self.output_view.append_message(f"\nErrores léxicos: {len(self.lexer_controller.error_collection.lexical_errors)}")
+        
+        if hasattr(self.parser_controller, 'error_collection'):
+            self.output_view.append_message(f"Errores sintácticos: {len(self.parser_controller.error_collection.syntax_errors)}")
+        
+        if hasattr(self.semantic_controller, 'error_collection'):
+            self.output_view.append_message(f"Errores semánticos: {len(self.semantic_controller.error_collection.semantic_errors)}")
+        
+        # Verificar la tabla de símbolos
+        if hasattr(self.semantic_controller, 'symbol_table'):
+            symbols = self.semantic_controller.symbol_table.get_all_symbols()
+            self.output_view.append_message(f"\nSímbolos en la tabla: {len(symbols)}")
+            for symbol in symbols:
+                self.output_view.append_message(f"  - '{symbol.name}' (tipo: {symbol.type}, valor: {symbol.value})")
+        
+        # Obtener código y hacer análisis de prueba
+        code = self.editor_view.toPlainText()
+        if not code.strip():
+            self.output_view.append_message("\nEditor vacío, no se puede analizar.")
+            return
+        
+        self.output_view.append_message("\n=== ANÁLISIS DE PRUEBA ===")
+        
+        # Reiniciar todo manualmente
+        from models.symbol_table import SymbolTable
+        from models.error import ErrorCollection
+        
+        # Crear nuevas instancias de las colecciones de errores
+        test_error_collection = ErrorCollection()
+        
+        # Crear un nuevo controlador semántico
+        from controllers.semantic_controller import SemanticController
+        test_semantic = SemanticController(test_error_collection)
+        
+        # Hacer el análisis léxico y sintáctico
+        tokens = self.lexer_controller.tokenize(code)
+        ast = self.parser_controller.parse(code)
+        
+        if ast:
+            # Hacer el análisis semántico con el nuevo controlador
+            success = test_semantic.analyze(ast)
+            
+            # Mostrar resultados
+            self.output_view.append_message(f"\nResultado del análisis de prueba: {'Éxito' if success else 'Falló'}")
+            
+            # Mostrar símbolos de la nueva tabla
+            symbols = test_semantic.symbol_table.get_all_symbols()
+            self.output_view.append_message(f"Símbolos en la tabla de prueba: {len(symbols)}")
+            for symbol in symbols:
+                self.output_view.append_message(f"  - '{symbol.name}' (tipo: {symbol.type}, valor: {symbol.value})")
+            
+            # Mostrar errores semánticos
+            if test_error_collection.semantic_errors:
+                self.output_view.append_message(f"\nErrores semánticos en la prueba: {len(test_error_collection.semantic_errors)}")
+                for error in test_error_collection.semantic_errors:
+                    self.output_view.append_message(f"  - {error}")
+        else:
+            self.output_view.append_message("No se pudo generar AST para la prueba.")
 
 
 if __name__ == "__main__":
