@@ -43,12 +43,12 @@ expresion: expr_logica
 expr_logica: expr_relacional (operador_logico expr_relacional)*
 
 expr_relacional: expr_aritmetica
-               | expr_relacional "==" expr_aritmetica
-               | expr_relacional "!=" expr_aritmetica
-               | expr_relacional ">" expr_aritmetica
-               | expr_relacional "<" expr_aritmetica
-               | expr_relacional ">=" expr_aritmetica
-               | expr_relacional "<=" expr_aritmetica
+               | expr_aritmetica "==" expr_aritmetica -> op_igual
+               | expr_aritmetica "!=" expr_aritmetica -> op_distinto
+               | expr_aritmetica ">" expr_aritmetica -> op_mayor
+               | expr_aritmetica "<" expr_aritmetica -> op_menor
+               | expr_aritmetica ">=" expr_aritmetica -> op_mayor_igual
+               | expr_aritmetica "<=" expr_aritmetica -> op_menor_igual
                
 expr_aritmetica: termino (operador_suma termino)*
 

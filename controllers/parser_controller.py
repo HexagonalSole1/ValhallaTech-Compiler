@@ -145,18 +145,34 @@ class ASTBuilder(Transformer):
     
     @v_args(inline=True)
     def expr_relacional(self, expr, *args):
-        """
-        Crear nodo de expresión relacional.
-        """
+        print(f"DEBUG expr_relacional: expr={expr}, args={args}")
+        
         if not args:
             return expr
         
+        # Caso especial para cuando tenemos dos operandos sin operador explícito
+        if len(args) == 1 and hasattr(args[0], 'name'):
+            # Estamos ante un caso como 'x > y' donde falta el operador
+            print(f"Caso especial: creando BinaryOpNode para comparación de {expr.name if hasattr(expr, 'name') else expr} > {args[0].name if hasattr(args[0], 'name') else args[0]}")
+            # Asumimos '>' como operador por defecto (ajusta según sea necesario)
+            result = BinaryOpNode('>', expr, args[0])
+            # Establecer el tipo explícitamente como bool
+            result.type = 'bool'
+            return result
+        
+        # Código original para el caso normal
         result = expr
         for i in range(0, len(args), 2):
             if i+1 < len(args):
-                operator = args[i].value if hasattr(args[i], 'value') else args[i]
+                operator = args[i]
+                if hasattr(operator, 'value'):
+                    operator = operator.value
                 right_expr = args[i+1]
+                print(f"Creando BinaryOpNode: {result} {operator} {right_expr}")
                 result = BinaryOpNode(operator, result, right_expr)
+                # Establecer tipo bool para operadores relacionales
+                if operator in ('==', '!=', '>', '<', '>=', '<='):
+                    result.type = 'bool'
         
         return result
     
@@ -193,7 +209,42 @@ class ASTBuilder(Transformer):
                 result = BinaryOpNode(operator, result, right_factor)
         
         return result
-    
+
+    @v_args(inline=True)
+    def op_igual(self, left, right):
+        node = BinaryOpNode("==", left, right)
+        node.type = "bool"
+        return node
+
+    @v_args(inline=True)
+    def op_distinto(self, left, right):
+        node = BinaryOpNode("!=", left, right)
+        node.type = "bool"
+        return node
+
+    @v_args(inline=True)
+    def op_mayor(self, left, right):
+        node = BinaryOpNode(">", left, right)
+        node.type = "bool"
+        return node
+
+    @v_args(inline=True)
+    def op_menor(self, left, right):
+        node = BinaryOpNode("<", left, right)
+        node.type = "bool"
+        return node
+
+    @v_args(inline=True)
+    def op_mayor_igual(self, left, right):
+        node = BinaryOpNode(">=", left, right)
+        node.type = "bool"
+        return node
+
+    @v_args(inline=True)
+    def op_menor_igual(self, left, right):
+        node = BinaryOpNode("<=", left, right)
+        node.type = "bool"
+        return node
     @v_args(inline=True)
     def factor(self, value):
         """

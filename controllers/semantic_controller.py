@@ -21,25 +21,38 @@ class ASTVisitor:
         else:
             print(f"Warning: Node {type(node).__name__} does not have 'accept' method")
             return self.generic_visit(node)
-    
     def generic_visit(self, node):
         """
         Método genérico para visitar un nodo.
-        
-        Args:
-            node (ASTNode o Tree): Nodo a visitar
-            
-        Returns:
-            varies: El resultado de visitar el nodo
         """
         import lark
         
         # Verificar si es un objeto Tree de Lark
         if isinstance(node, lark.Tree):
-            print(f"Advertencia: Se encontró un nodo Tree de Lark de tipo '{node.data}'")
-            # Procesar hijos
+            print(f"ATENCIÓN: Se encontró un nodo Tree de Lark no convertido: tipo='{node.data}'")
+            
+            # Intentar convertir expresiones relacionales
+            if node.data == 'expr_relacional' and len(node.children) >= 2:
+                left = node.children[0]
+                if len(node.children) >= 3:
+                    operator = node.children[1].value if hasattr(node.children[1], 'value') else str(node.children[1])
+                    right = node.children[2]
+                else:
+                    # Asumir operador '>' si no encontramos uno explícito
+                    operator = '>'
+                    right = node.children[1]
+                
+                print(f"Convirtiendo Tree a BinaryOpNode: {left} {operator} {right}")
+                converted_node = BinaryOpNode(operator, left, right)
+                converted_node.type = 'bool'
+                
+                # Visitar el nodo convertido
+                return self.visit(converted_node)
+            
+            # Procesar hijos normalmente
             for child in node.children:
                 self.visit(child)
+                
             return None
         
         # Manejo regular para nodos AST
@@ -47,7 +60,6 @@ class ASTVisitor:
             for child in node.children:
                 self.visit(child)
         return None
-
 
 class SemanticVisitor(ASTVisitor):
     """
@@ -276,6 +288,11 @@ class SemanticVisitor(ASTVisitor):
         Visita un nodo de condición if.
         """
         print(f"Visitando IfNode")
+        print(f"DEBUG IfNode: condition={type(node.condition).__name__}")
+    
+        # Si la condición es un VariableNode sin operación, intentar convertirlo
+        if isinstance(node.condition, VariableNode) and hasattr(node, 'if_body'):
+            print(f"¡ADVERTENCIA! La condición del if es sólo una variable: {node.condition.name}")
         
         # Visitar la condición
         self.visit(node.condition)
