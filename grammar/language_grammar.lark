@@ -1,0 +1,93 @@
+// Gramática para el lenguaje basada en los documentos proporcionados
+// Combina análisis léxico y sintáctico según el formato de Lark
+
+// Punto de entrada de la gramática
+start: programa
+
+// Reglas sintácticas principales
+programa: declaracion* sentencia*
+
+declaracion: tipo identificador_lista ";"
+
+tipo: "ent" -> tipo_entero
+    | "dec" -> tipo_decimal
+    | "cadena" -> tipo_cadena
+
+identificador_lista: identificador ("," identificador)*
+
+sentencia: asignacion
+         | condicional
+         | bucle_mientras
+         | bucle_repetir
+         | impresion
+         | entrada
+         | bloque
+
+asignacion: variable "=" expresion ";"
+
+condicional: "si" "(" expresion ")" bloque ["oNo" bloque]
+
+bucle_mientras: "mientras" "(" expresion ")" bloque
+
+bucle_repetir: "repetir" "(" entero ")" bloque
+
+impresion: "sout" "(" (expresion | string) ")" ";"
+
+entrada: "scan" "(" variable ")" ";"
+
+bloque: "{" sentencia* "}"
+
+// Expresiones
+expresion: expr_logica
+
+expr_logica: expr_relacional (operador_logico expr_relacional)*
+
+expr_relacional: expr_aritmetica (operador_relacional expr_aritmetica)*
+
+expr_aritmetica: termino (operador_suma termino)*
+
+termino: factor (operador_mult factor)*
+
+factor: "(" expresion ")"
+      | entero
+      | decimal
+      | variable
+      | string
+
+// Operadores
+operador_logico: "&&" | "||"
+
+operador_relacional: "==" | "!=" | ">" | "<" | ">=" | "<="
+
+operador_suma: "+" | "-"
+
+operador_mult: "*" | "/"
+
+// Tokens básicos
+variable: IDENTIFICADOR
+
+entero: ENTERO
+
+decimal: DECIMAL
+
+string: STRING
+
+identificador: IDENTIFICADOR
+
+// Definición de tokens léxicos
+COMENTARIO: "//" /[^\n]*/
+          | "/*" /(.|\n)*?/ "*/"
+
+ENTERO: /[0-9]+/
+
+DECIMAL: /[0-9]+\.[0-9]+/
+
+STRING: /"[^"]*"/
+
+IDENTIFICADOR: /[a-zA-Z_][a-zA-Z0-9_]*/
+
+// Tokens a ignorar
+ESPACIO: /[ \t\r\n]+/
+
+%ignore ESPACIO
+%ignore COMENTARIO
