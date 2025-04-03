@@ -13,39 +13,53 @@ class AttributeHandler:
     
     def handle_declaration(self, decl_node):
         """
-        Maneja la regla: D ::= T L { L.tipo = T.tipo; D.tipo = L.tipo; }
-        
-        Args:
-            decl_node: Nodo de declaración que contiene T (tipo) y L (lista de identificadores)
+        Maneja la regla de declaración, insertando símbolos en la tabla.
         """
-        # Extraer el tipo (atributo sintético de T)
-        var_type = decl_node.var_type  # T.tipo
+        print(f"Procesando declaración - Tipo: {decl_node.var_type}")
+        print(f"  Número de hijos: {len(decl_node.children)}")
         
-        # Propagar el tipo a los identificadores (atributo heredado para L)
+        var_type = decl_node.var_type
+        
+        # Iterar sobre los hijos (lista de identificadores)
         for child in decl_node.children:
-            child.type = var_type  # L.tipo = T.tipo
+            # Verificar que sea un IdentifierListNode
+            if hasattr(child, 'identifiers'):
+                print(f"  Identificadores en la lista: {child.identifiers}")
+                
+                for identifier_name in child.identifiers:
+                    print(f"  Insertando símbolo: {identifier_name} (tipo: {var_type})")
+                    
+                    # Verificar si ya existe
+                    existing_symbol = self.symbol_table.lookup(identifier_name)
+                    if existing_symbol:
+                        error = RedeclarationError(
+                            identifier_name, 
+                            line=None,  # Añadir línea si es posible
+                            column=None  # Añadir columna si es posible
+                        )
+                        self.error_collection.add_error(error)
+                    else:
+                        # Insertar nuevo símbolo
+                        self.symbol_table.insert(
+                            name=identifier_name,
+                            type=var_type
+                        )
         
-        # El tipo de la declaración es el mismo (atributo sintético de D)
-        decl_node.type = var_type  # D.tipo = L.tipo
-        
-        return var_type
+        return True
     
     def handle_identifier_list(self, list_node):
         """
-        Maneja la regla: L ::= Ld , i { Ld.tipo = L.tipo; i.tipo = L.tipo; insertar(TablaSimbolos, i, L.tipo); }
-                           L ::= i { i.tipo = L.tipo; insertar(TablaSimbolos, i, L.tipo); }
-        
-        Args:
-            list_node: Nodo de lista de identificadores
+        Maneja la regla de lista de identificadores.
         """
-        # Propagar el tipo heredado a todos los identificadores
+        print(f"Procesando lista de identificadores:")
+        print(f"  Tipo heredado: {list_node.type}")
+        print(f"  Identificadores: {list_node.identifiers}")
+        
         inherited_type = list_node.type
         
         for child in list_node.children:
-            # Propagar tipo a cada identificador (i.tipo = L.tipo)
-            child.type = inherited_type
+            print(f"  Procesando identificador: {child.name}")
             
-            # Insertar en la tabla de símbolos
             name = child.name
             if self.symbol_table.lookup(name):
                 # Error: variable ya declarada
@@ -59,6 +73,7 @@ class AttributeHandler:
                     line=child.line,
                     column=child.column
                 )
+                print(f"  Insertado símbolo: {name} ({inherited_type})")
         
         return True
     

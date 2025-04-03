@@ -68,7 +68,12 @@ class SymbolTableView(QTableWidget):
         """
         # Obtener todos los símbolos
         symbols = symbol_table.get_all_symbols()
-        print(f"SymbolTableView: recibidos {len(symbols)} símbolos")
+        # Depuración detallada
+        print("Debugging Symbol Table:")
+        print(f"Total number of symbols: {len(symbols)}")
+        
+        for symbol in symbols:
+            print(f"Symbol - Name: {symbol.name}, Type: {symbol.type}")
 
         if not symbols:
             # Mostrar mensaje si no hay símbolos

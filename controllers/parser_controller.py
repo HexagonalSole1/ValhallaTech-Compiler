@@ -8,6 +8,50 @@ class ASTBuilder(Transformer):
     Transformador de Lark para construir el AST a partir del árbol de análisis.
     """
     
+    def start(self, args):
+        """
+        Método para manejar el nodo raíz de la gramática.
+        """
+        programa_node = ProgramNode()
+        
+        # Filtrar y añadir solo los elementos válidos
+        for arg in args:
+            if arg is not None:
+                if isinstance(arg, list):
+                    # Si es una lista, añadir cada elemento
+                    for item in arg:
+                        if item is not None:
+                            programa_node.add_child(item)
+                else:
+                    programa_node.add_child(arg)
+        
+        print(f"start method - Número de hijos: {len(programa_node.children)}")
+        return programa_node
+    
+    def programa(self, args):
+        """
+        Procesar los elementos del programa.
+        """
+        programa_node = ProgramNode()
+        
+        # Depuración detallada
+        print(f"programa method - Número de argumentos: {len(args)}")
+        
+        for arg in args:
+            if arg is not None:
+                if isinstance(arg, list):
+                    # Si es una lista, añadir cada elemento
+                    for item in arg:
+                        if item is not None:
+                            programa_node.add_child(item)
+                            print(f"  Añadido hijo: {type(item).__name__}")
+                else:
+                    programa_node.add_child(arg)
+                    print(f"  Añadido hijo: {type(arg).__name__}")
+        
+        print(f"programa method - Número de hijos: {len(programa_node.children)}")
+        return programa_node
+    
     @v_args(inline=True)
     def programa(self, *statements):
         node = ProgramNode()
@@ -269,23 +313,28 @@ class ParserController:
         # Instanciar el transformador
         self.transformer = ASTBuilder()
         
-        # Crear el parser conectado directamente con el transformador para asegurar
-        # que la transformación ocurra automáticamente
-        self.parser = Lark(grammar, parser='lalr')
+        # Crear el parser con modo de depuración para obtener más información
+        self.parser = Lark(grammar, parser='lalr', 
+                        debug=True,  # Añadir modo de depuración
+                        lexer='basic')
     
-    def parse(self, code):
+    def parse(self, code, tokens=None):
         """
         Realiza el análisis sintáctico del código fuente.
         
         Args:
             code (str): Código fuente a analizar
+            tokens (list, optional): Lista de tokens generados por el lexer
             
         Returns:
             ASTNode: Nodo raíz del AST o None si hay errores
         """
         try:
-            # Analizar el código y construir el árbol de análisis
-            parse_tree = self.parser.parse(code)
+            # Usar tokens del lexer si están disponibles
+            if tokens:
+                parse_tree = self.parser.parse(code, tokens=tokens)
+            else:
+                parse_tree = self.parser.parse(code)
             
             # Transformar explícitamente el árbol de análisis en un AST
             self.ast = self.transformer.transform(parse_tree)
@@ -306,7 +355,6 @@ class ParserController:
             error = SyntaxError(error_msg)
             self.error_collection.add_error(error)
             return None
-    
     def get_ast(self):
         """
         Obtiene el AST generado.
@@ -324,3 +372,28 @@ class ParserController:
             bool: True si hay errores, False en caso contrario
         """
         return any(isinstance(e, SyntaxError) for e in self.error_collection.get_all_errors())
+    def handle_declaration(self, decl_node):
+        """
+        Convierte la declaración en un nodo del AST.
+        """
+        print(f"Creando nodo de declaración con tipo: {decl_node.var_type}")
+        
+        # Crear el nodo de declaración
+        node = DeclarationNode(decl_node.var_type)
+        
+        # Crear los nodos de identificadores
+        identifiers_node = IdentifierListNode()
+        identifiers_node.type = decl_node.var_type
+        identifiers_node.identifiers = []
+        
+        # Añadir los identificadores al nodo de lista
+        for id_token in decl_node.children:
+            identifier = IdentifierNode(id_token.value)
+            identifier.type = decl_node.var_type
+            identifiers_node.identifiers.append(id_token.value)
+            identifiers_node.add_child(identifier)
+        
+        # Añadir la lista de identificadores al nodo de declaración
+        node.add_child(identifiers_node)
+        
+        return node    

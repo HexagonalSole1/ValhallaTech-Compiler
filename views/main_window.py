@@ -317,8 +317,9 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, 'Información', 'El editor está vacío')
             return
         
-        # Realizar análisis léxico primero
-        self.lexer_controller.tokenize(code)
+        # Realizar análisis léxico
+        tokens = self.lexer_controller.tokenize(code)
+        
         if self.lexer_controller.has_errors():
             self.output_view.show_errors("Análisis Léxico", 
                                         self.lexer_controller.error_collection.lexical_errors)
@@ -337,7 +338,6 @@ class MainWindow(QMainWindow):
             
             # Mostrar mensaje de éxito
             self.output_view.append_message("\nAnálisis sintáctico completado con éxito.")
-    
     def _on_semantic_analysis(self):
         """
         Maneja la acción de realizar el análisis semántico.

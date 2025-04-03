@@ -5,7 +5,7 @@
 start: programa
 
 // Reglas sintácticas principales
-programa: declaracion* sentencia*
+programa: (declaracion | sentencia)*
 
 declaracion: tipo identificador_lista ";"
 

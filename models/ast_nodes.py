@@ -15,7 +15,14 @@ class ASTNode:
     
     def add_child(self, child):
         """Añade un nodo hijo a este nodo."""
-        self.children.append(child)
+        if child is not None:
+            # Si es una lista de nodos, añadirlos individualmente
+            if isinstance(child, list):
+                for item in child:
+                    if item is not None:
+                        self.children.append(item)
+            else:
+                self.children.append(child)
         return child
     
     def accept(self, visitor):

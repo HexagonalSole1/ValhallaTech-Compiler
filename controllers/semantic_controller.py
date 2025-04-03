@@ -71,13 +71,14 @@ class SemanticVisitor(ASTVisitor):
         
         # Verificar si hay errores semánticos
         return not any(isinstance(e, SemanticError) for e in self.error_collection.get_all_errors())
-    
+        
     def visit_DeclarationNode(self, node):
         """
         Visita un nodo de declaración.
         Aplica la regla: D ::= T L { L.tipo = T.tipo; D.tipo = L.tipo; }
         """
         print(f"Visitando DeclarationNode con tipo: {node.var_type}")
+        print(f"  Número de hijos: {len(node.children)}")
         
         # Aplicar regla de la gramática atributada
         self.attr_handler.handle_declaration(node)
@@ -314,6 +315,17 @@ class SemanticController:
         self.symbol_table = SymbolTable()
         self.visitor.symbol_table = self.symbol_table
         
+        # Añadir más depuración
+        def print_node_details(node, indent=""):
+            print(f"{indent}Nodo: {type(node).__name__}")
+            if hasattr(node, 'children'):
+                print(f"{indent}  Número de hijos: {len(node.children)}")
+                for child in node.children:
+                    print_node_details(child, indent + "  ")
+        
+        print("Estructura del AST:")
+        print_node_details(ast)
+        
         # Ejecutar el análisis semántico
         result = self.visitor.visit(ast)
         
@@ -323,6 +335,7 @@ class SemanticController:
             print(f"  - {symbol.name} ({symbol.type})")
         
         return result
+            
     
     def get_symbol_table(self):
         """
