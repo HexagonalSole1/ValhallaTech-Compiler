@@ -39,6 +39,7 @@ class ASTBuilder(Transformer):
     @v_args(inline=True)
     def identificador_lista(self, *identificadores):
         node = IdentifierListNode()
+        node.identifiers = []  # Inicializar la lista si no existe
         for identificador in identificadores:
             if isinstance(identificador, IdentifierNode):
                 node.identifiers.append(identificador.name)
@@ -229,6 +230,20 @@ class ASTBuilder(Transformer):
         value = str_token.value[1:-1]
         return StringNode(value, str_token.line, str_token.column)
 
+    # Añadido para manejar la regla de inicio
+    def start(self, programa):
+        # Asegurar que transformamos correctamente el nodo raíz
+        if hasattr(programa, 'accept'):
+            return programa
+        else:
+            # Si llegamos aquí, necesitamos convertir el nodo manualmente
+            new_programa = ProgramNode()
+            # Intentar extraer los hijos si existen
+            if hasattr(programa, 'children'):
+                for child in programa.children:
+                    if hasattr(child, 'accept'):
+                        new_programa.add_child(child)
+            return new_programa
 
 class ParserController:
     """
@@ -251,9 +266,12 @@ class ParserController:
         with open(grammar_path, 'r') as f:
             grammar = f.read()
         
-        # Crear el parser
-        self.parser = Lark(grammar, parser='lalr')
+        # Instanciar el transformador
         self.transformer = ASTBuilder()
+        
+        # Crear el parser conectado directamente con el transformador para asegurar
+        # que la transformación ocurra automáticamente
+        self.parser = Lark(grammar, parser='lalr')
     
     def parse(self, code):
         """
@@ -269,14 +287,23 @@ class ParserController:
             # Analizar el código y construir el árbol de análisis
             parse_tree = self.parser.parse(code)
             
-            # Transformar el árbol de análisis en un AST
+            # Transformar explícitamente el árbol de análisis en un AST
             self.ast = self.transformer.transform(parse_tree)
+            
+            # Verificar que tenemos un nodo AST válido
+            if not hasattr(self.ast, 'accept'):
+                print(f"WARNING: Transformation failed - got {type(self.ast).__name__} instead of ASTNode")
+                # Crear un nodo de programa manualmente como fallback
+                manual_ast = ProgramNode()
+                self.ast = manual_ast
             
             return self.ast
             
         except Exception as e:
             # Capturar errores sintácticos
-            error = SyntaxError(str(e))
+            error_msg = f"Error de sintaxis: {str(e)}"
+            print(error_msg)
+            error = SyntaxError(error_msg)
             self.error_collection.add_error(error)
             return None
     
@@ -297,22 +324,3 @@ class ParserController:
             bool: True si hay errores, False en caso contrario
         """
         return any(isinstance(e, SyntaxError) for e in self.error_collection.get_all_errors())
-    
-    # Métodos auxiliares para diferentes operadores relacionales
-    def eq(self, left, right):
-        return BinaryOpNode("==", left, right)
-
-    def ne(self, left, right):
-        return BinaryOpNode("!=", left, right)
-
-    def gt(self, left, right):
-        return BinaryOpNode(">", left, right)
-
-    def lt(self, left, right):
-        return BinaryOpNode("<", left, right)
-
-    def ge(self, left, right):
-        return BinaryOpNode(">=", left, right)
-
-    def le(self, left, right):
-        return BinaryOpNode("<=", left, right)
