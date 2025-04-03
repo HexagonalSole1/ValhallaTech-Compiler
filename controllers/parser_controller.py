@@ -267,12 +267,10 @@ class ASTBuilder(Transformer):
         return op.value if hasattr(op, 'value') else str(op)
     
     @v_args(inline=True)
-    def operador_suma(self, op):
-        """
-        Extraer operador de suma.
-        """
+    def operador_suma(self, op=None):
+        if op is None:
+            return "+"  # Valor por defecto
         return op.value if hasattr(op, 'value') else str(op)
-    
     @v_args(inline=True)
     def operador_mult(self, op):
         """
