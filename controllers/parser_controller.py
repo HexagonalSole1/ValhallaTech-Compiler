@@ -65,7 +65,16 @@ class ASTBuilder(Transformer):
                 node.add_child(identificador)
         
         return node
-    
+
+    @v_args(inline=True)
+    def expr_suma(self, left, right):
+        print(f"DEBUG - Creando SUMA explícita: {left} + {right}")
+        return BinaryOpNode("+", left, right)
+
+    @v_args(inline=True)
+    def expr_resta(self, left, right):
+        print(f"DEBUG - Creando RESTA explícita: {left} - {right}")
+        return BinaryOpNode("-", left, right)
     @v_args(inline=True)
     def identificador(self, id_token):
         """
@@ -266,11 +275,95 @@ class ASTBuilder(Transformer):
         """
         return op.value if hasattr(op, 'value') else str(op)
     
+# Este fragmento es para el ASTBuilder en parser_controller.py
+
     @v_args(inline=True)
-    def operador_suma(self, op=None):
+    def operador_suma(self, op):
+        """
+        Extraer operador de suma o resta.
+        """
         if op is None:
             return "+"  # Valor por defecto
-        return op.value if hasattr(op, 'value') else str(op)
+        
+        # Obtener el valor real del operador
+        if hasattr(op, 'value'):
+            result = op.value
+        else:
+            result = str(op)
+        
+        print(f"DEBUG - Operador extraído: '{result}' - Tipo: {type(op)}")
+        return result
+    
+    @v_args(inline=True)
+    def expr_aritmetica(self, term, *args):
+        """
+        Crear nodo de expresión aritmética.
+        """
+        if not args:
+            return term
+        
+        result = term
+        for i in range(0, len(args), 2):
+            if i+1 < len(args):
+                # Obtener el operador real (+ o -)
+                if hasattr(args[i], 'value'):
+                    operator = args[i].value
+                else:
+                    operator = str(args[i])
+                
+                right_term = args[i+1]
+                
+                # Verificación detallada para operadores
+                print(f"DEBUG - Operador en expr_aritmetica: '{operator}' - Tipo: {type(operator)}")
+                
+                # Crear el nodo binario con el operador correcto
+                binary_node = BinaryOpNode(operator, result, right_term)
+                
+                # Verificación extra
+                if operator == '-':
+                    print(f"DEBUG - Creando operación de RESTA: {result} - {right_term}")
+                elif operator == '+':
+                    print(f"DEBUG - Creando operación de SUMA: {result} + {right_term}")
+                
+                result = binary_node
+        
+        return result
+    
+    # Implementación completa para term y operador_mult también
+    @v_args(inline=True)
+    def termino(self, factor, *args):
+        """
+        Crear nodo de término.
+        """
+        if not args:
+            return factor
+        
+        result = factor
+        for i in range(0, len(args), 2):
+            if i+1 < len(args):
+                # Obtener el operador real (* o /)
+                if hasattr(args[i], 'value'):
+                    operator = args[i].value
+                else:
+                    operator = str(args[i])
+                
+                right_factor = args[i+1]
+                
+                # Verificación detallada
+                print(f"DEBUG - Operador en termino: '{operator}' - Tipo: {type(operator)}")
+                
+                # Crear nodo con el operador correcto
+                binary_node = BinaryOpNode(operator, result, right_factor)
+                
+                # Verificación extra
+                if operator == '*':
+                    print(f"DEBUG - Creando operación de MULTIPLICACIÓN: {result} * {right_factor}")
+                elif operator == '/':
+                    print(f"DEBUG - Creando operación de DIVISIÓN: {result} / {right_factor}")
+                
+                result = binary_node
+        
+        return result
     @v_args(inline=True)
     def operador_mult(self, op):
         """

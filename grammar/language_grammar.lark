@@ -50,8 +50,13 @@ expr_relacional: expr_aritmetica
                | expr_aritmetica ">=" expr_aritmetica -> op_mayor_igual
                | expr_aritmetica "<=" expr_aritmetica -> op_menor_igual
                
-expr_aritmetica: termino (operador_suma termino)*
+expr_aritmetica: termino
+               | termino "+" termino -> expr_suma
+               | termino "-" termino -> expr_resta
 
+// Y añadir estas reglas
+expr_suma: termino "+" termino
+expr_resta: termino "-" termino
 termino: factor (operador_mult factor)*
 
 factor: "(" expresion ")"
