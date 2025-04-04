@@ -53,11 +53,17 @@ expr_relacional: expr_aritmetica
 expr_aritmetica: termino
                | termino "+" termino -> expr_suma
                | termino "-" termino -> expr_resta
+               | termino "*" termino -> expr_mult
+               | termino "/" termino -> expr_division
 
 // Y añadir estas reglas
 expr_suma: termino "+" termino
 expr_resta: termino "-" termino
-termino: factor (operador_mult factor)*
+expr_mult: termino "*" termino
+expr_division: termino "/" termino
+
+termino: factor 
+// (operador_mult factor)*
 
 factor: "(" expresion ")"
       | entero

@@ -74,7 +74,18 @@ class ASTBuilder(Transformer):
     @v_args(inline=True)
     def expr_resta(self, left, right):
         print(f"DEBUG - Creando RESTA explícita: {left} - {right}")
-        return BinaryOpNode("-", left, right)
+        return BinaryOpNode("-", left, right)    
+        
+    @v_args(inline=True)
+    def expr_mult(self, left, right):
+        print(f"DEBUG - Creando multi explícita: {left} + {right}")
+        return BinaryOpNode("*", left, right)
+
+    @v_args(inline=True)
+    def expr_division(self, left, right):
+        print(f"DEBUG - Creando division explícita: {left} - {right}")
+        return BinaryOpNode("/", left, right)   
+    
     @v_args(inline=True)
     def identificador(self, id_token):
         """
@@ -294,6 +305,55 @@ class ASTBuilder(Transformer):
         print(f"DEBUG - Operador extraído: '{result}' - Tipo: {type(op)}")
         return result
     
+    
+    @v_args(inline=True)
+    def operador_mult(self, op=None):
+        """
+        Extraer operador de multiplicación o división.
+        """
+        print(f"DEBUG - Procesando operador_mult: {op}")
+        
+        # Si no se proporciona operador, usar * por defecto
+        if op is None:
+            print(f"DEBUG - No se proporcionó operador, usando '*' por defecto")
+            return "*"
+        
+        # Si el operador es un Tree, intentar extraer su valor
+        import lark
+        if isinstance(op, lark.Tree):
+            # Comprobar si hay un Token en el Tree que podamos usar
+            if op.children and hasattr(op.children[0], 'value'):
+                operator_value = op.children[0].value
+                print(f"DEBUG - Extrayendo valor del hijo del Tree: {operator_value}")
+                return operator_value
+            else:
+                # Si no encontramos valor, usamos el data del Tree para determinar el operador
+                print(f"DEBUG - Usando data del Tree: {op.data}")
+                if op.data == 'operador_mult':
+                    return "*" 
+                elif op.data == 'expr_division' or op.data == 'operador_div' or "div" in op.data:
+                    return "/"
+        
+        # Si es un Token o tiene un atributo value
+        if hasattr(op, 'value'):
+            # Verificar explícitamente si es un operador de división
+            value = op.value
+            if value == '/':
+                print(f"DEBUG - Encontrado operador de división explícito: {value}")
+                return "/"
+            return value
+        
+        # Si es una cadena directamente
+        if isinstance(op, str):
+            # Verificar explícitamente si es un operador de división
+            if op == '/':
+                print(f"DEBUG - Encontrado operador de división como cadena: {op}")
+                return "/"
+            return op
+        
+        # Si todo falla, asumimos "*" por defecto
+        print(f"DEBUG - No se pudo extraer operador, usando '*' por defecto")
+        return "*"
     @v_args(inline=True)
     def expr_aritmetica(self, term, *args):
         """
@@ -364,12 +424,7 @@ class ASTBuilder(Transformer):
                 result = binary_node
         
         return result
-    @v_args(inline=True)
-    def operador_mult(self, op):
-        """
-        Extraer operador de multiplicación.
-        """
-        return op.value if hasattr(op, 'value') else str(op)
+
     
     @v_args(inline=True)
     def variable(self, var_token):
